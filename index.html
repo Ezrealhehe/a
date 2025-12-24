@@ -41,15 +41,12 @@
 
         /* Camera Preview Vandiep */
         #camera-preview {
-position: absolute;
-    top: 15px;
-    right: 15px;
-    width: 320px; /* Tăng chiều rộng */
-    height: 240px; /* Tăng chiều cao */
-    border: 2px solid rgba(255,0,0,0.5);
-    transform: scaleX(-1);
-    opacity: 0.8; /* Tăng độ rõ */
-    border-radius: 8px;
+            position: absolute; top: 15px; right: 15px;
+            width: 320px; /* Tăng chiều rộng */
+            height: 240px; /* Tăng chiều cao */
+            border: 2px solid rgba(255,0,0,0.5); 
+            transform: scaleX(-1); opacity: 0.8; /* Tăng độ rõ */
+            border-radius: 8px;
         }
         
         /* Vandiep */
@@ -491,7 +488,8 @@ position: absolute;
             hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
             hands.onResults(results => {
-                ctx.clearRect(0,0,100,75); ctx.drawImage(results.image, 0, 0, 100, 75);
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
                 // --- Hand Logic  ---
                 if (results.multiHandLandmarks.length === 2) {
@@ -535,6 +533,7 @@ position: absolute;
     </script>
 </body>
 </html>
+
 
 
 

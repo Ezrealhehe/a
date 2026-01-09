@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Birthday Celebration</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { margin: 0; overflow: hidden; background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); font-family: 'Segoe UI', sans-serif; }
+        #canvas-container { width: 100%; height: 100vh; display: block; }
+        
+        /* UI Center */
+        #ui-layer {
+            position: absolute; bottom: 30px; width: 100%;
+            text-align: center; pointer-events: none; z-index: 100;
+        }
+        
+        /* Guide text */
+        .guide { 
+            color: rgba(255, 255, 255, 0.9); 
+            font-size: 14px; 
+            margin-bottom: 20px; 
+            text-shadow: 0 2px 10px rgba(255, 105, 180, 0.7);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: inline-block;
+            backdrop-filter: blur(5px);
+        }
+
+        button {
+            pointer-events: auto; cursor: pointer;
+            background: linear-gradient(to right, #FF69B4, #8A2BE2, #FFD700); 
+            color: white; 
+            border: none;
+            padding: 18px 60px; 
+            border-radius: 50px; 
+            font-weight: 800; 
+            font-size: 18px;
+            box-shadow: 0 0 40px rgba(255, 105, 180, 0.8);
+            animation: pulse 2s infinite;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+        }
+        button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 60px rgba(255, 105, 180, 1);
+        }
+        @keyframes pulse { 
+            0% { box-shadow: 0 0 30px rgba(255, 105, 180, 0.6); }
+            50% { box-shadow: 0 0 60px rgba(255, 105, 180, 1); }
+            100% { box-shadow: 0 0 30px rgba(255, 105, 180, 0.6); }
+        }
+
+        /* Camera Preview */
+        #camera-preview {
+            position: absolute; top: 15px; right: 15px;
+            width: 280px;
+            height: 210px;
+            border: 3px solid rgba(255, 105, 180, 0.7); 
+            transform: scaleX(-1); opacity: 0.9;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(255, 105, 180, 0.5);
+        }
+        
+        /* Copyright */
+        #copyright {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            z-index: 100;
+            font-family: monospace;
+            pointer-events: none;
+        }
+
+        /* Birthday message */
+        #birthday-message {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 18px;
+            z-index: 100;
+            font-family: 'Comic Sans MS', cursive;
+            pointer-events: none;
+            text-shadow: 0 0 20px rgba(255, 105, 180, 0.8);
+            background: linear-gradient(90deg, #FF69B4, #8A2BE2, #FFD700);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            padding: 10px;
+        }
+        
+        /* Balloon counter */
+        #balloon-counter {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 2px solid #FF69B4;
+        }
+    </style>
+</head>
+<body>
+    <!-- Birthday Message -->
+    <div id="birthday-message">
+        🎂🎉 CHÚC MỪNG SINH NHẬT! 🎉🎂
+    </div>
+    
+    <!-- Balloon Counter -->
+    <div id="balloon-counter">
+        🎈 <span id="balloon-count">0</span>
+    </div>
+    
+    <!-- UI -->
+    <div id="ui-layer">
+        <div class="guide">
+            ✋ <b>Mở tay:</b> Bung bóng &nbsp;|&nbsp; 🫶 <b>Tạo tim:</b> Gửi yêu thương &nbsp;|&nbsp; ✊ <b>Nắm tay:</b> Bánh kem
+        </div>
+        <button id="btnStart" onclick="startSystem()">BẮT ĐẦU TIỆC SINH NHẬT 🎉</button>
+    </div>
+
+    <!-- Copyright -->
+    <div id="copyright">Birthday Magic Experience</div>
+
+    <div id="canvas-container"></div>
+    <video class="input_video" style="display:none"></video>
+    <canvas id="camera-preview"></canvas>
+
+    <script>
+        // ==========================================
+        // 1. RESOURCES CONFIG
+        // ==========================================
+        const MUSIC_URL = "https://assets.mixkit.co/music/preview/mixkit-happy-birthday-to-you-443.mp3";
+        let bgMusic = new Audio(MUSIC_URL);
+        bgMusic.loop = true; 
+        bgMusic.volume = 0.6;
+
+        const loader = new THREE.TextureLoader();
+        
+        // Birthday photos - bạn có thể thay thế bằng ảnh thật
+        const birthdayPhotos = [
+            '1.jpeg',
+            '2.jpeg',
+            '3.jpeg',
+            '4.jpeg',
+            '5.jpeg'
+        ];
+        
+        const photoTextures = [];
+        let photosLoaded = 0;
+
+        // Load photos với error handling tốt hơn
+        birthdayPhotos.forEach((url, i) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous'; // Cho phép CORS
+            
+            img.onload = function() {
+                const texture = new THREE.Texture(img);
+                texture.needsUpdate = true;
+                photoTextures[i] = texture;
+                photosLoaded++;
+                
+                console.log(`✅ Đã tải ảnh ${i + 1}/5: ${url}`);
+                
+                // Update mesh nếu đã tạo
+                if(photoMeshes[i]) {
+                    photoMeshes[i].material.map = texture;
+                    photoMeshes[i].material.needsUpdate = true;
+                }
+                
+                // Log khi tất cả ảnh đã load xong
+                if(photosLoaded === 5) {
+                    console.log('🎉 Đã tải xong tất cả ảnh!');
+                }
+            };
+            
+            img.onerror = function() {
+                console.error(`❌ Không thể tải ảnh ${i + 1}: ${url}`);
+                console.log('Kiểm tra:');
+                console.log('1. Đường dẫn ảnh có đúng không?');
+                console.log('2. Tệp ảnh có tồn tại trong folder images không?');
+                console.log('3. Có chạy qua http-server không?');
+                
+                // Tạo ảnh placeholder màu
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
+                const ctx = canvas.getContext('2d');
+                
+                // Màu ngẫu nhiên cho mỗi ảnh
+                const colors = ['#FF69B4', '#8A2BE2', '#FFD700', '#FF1493', '#00CED1'];
+                ctx.fillStyle = colors[i];
+                ctx.fillRect(0, 0, 512, 512);
+                
+                // Text
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Ảnh ${i + 1}`, 256, 256);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                photoTextures[i] = texture;
+                
+                if(photoMeshes[i]) {
+                    photoMeshes[i].material.map = texture;
+                    photoMeshes[i].material.needsUpdate = true;
+                }
+            };
+            
+            img.src = url;
+        });
+
+        function createCustomTexture(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            const cx = 128, cy = 128;
+
+            if (type === 'gold_sparkle') {
+                // Gold sparkle for candles
+                const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, 100);
+                grd.addColorStop(0, '#FFFFFF'); 
+                grd.addColorStop(0.1, '#FFFF99'); 
+                grd.addColorStop(0.3, '#FFD700');
+                grd.addColorStop(1, 'rgba(255, 215, 0, 0)');
+                ctx.fillStyle = grd; 
+                ctx.fillRect(0,0,256,256);
+                
+                // Add sparkle dots
+                ctx.fillStyle = '#FFFFFF';
+                for(let j=0; j<20; j++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = Math.random() * 100;
+                    const x = cx + Math.cos(angle) * dist;
+                    const y = cy + Math.sin(angle) * dist;
+                    const size = 2 + Math.random() * 4;
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+            } else if (type === 'pink_balloon') {
+                // Pink balloon texture
+                ctx.beginPath();
+                ctx.arc(cx, cy, 100, 0, Math.PI * 2);
+                const grd = ctx.createRadialGradient(cx-30, cy-30, 0, cx, cy, 100);
+                grd.addColorStop(0, '#FFB6C1'); 
+                grd.addColorStop(0.5, '#FF69B4'); 
+                grd.addColorStop(1, '#8A2BE2');
+                ctx.fillStyle = grd;
+                ctx.fill();
+                
+                // Balloon highlight
+                ctx.beginPath();
+                ctx.arc(cx-40, cy-40, 30, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fill();
+
+            } else if (type === 'gift_box') {
+                // Gift box texture
+                ctx.fillStyle = '#8A2BE2'; 
+                ctx.fillRect(40, 40, 176, 176);
+                
+                // Ribbon
+                ctx.fillStyle = '#FF69B4';
+                ctx.fillRect(cx-5, 40, 10, 176); // Vertical
+                ctx.fillRect(40, cy-5, 176, 10); // Horizontal
+                
+                // Bow
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 25, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Ribbon ends
+                ctx.fillRect(cx-3, 40, 6, 30);
+                ctx.fillRect(cx-3, 186, 6, 30);
+                ctx.fillRect(40, cy-3, 30, 6);
+                ctx.fillRect(186, cy-3, 30, 6);
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const textures = {
+            gold: createCustomTexture('gold_sparkle'),
+            pink: createCustomTexture('pink_balloon'),
+            gift: createCustomTexture('gift_box')
+        };
+
+        // ==========================================
+        // 2. SYSTEM CONFIG - BIRTHDAY THEME
+        // ==========================================
+        const CONFIG = {
+            goldCount: 1500,    // Sparkles/candles
+            pinkCount: 800,     // Balloons
+            giftCount: 300,     // Gifts
+            explodeRadius: 80,  
+            photoOrbitRadius: 30,
+            cakeHeight: 60,
+            cakeRadius: 40,
+            balloonSpeed: 0.5
+        };
+
+        let scene, camera, renderer;
+        let groupGold, groupPink, groupGift; 
+        let photoMeshes = [];    
+        let titleMesh, cakeMesh, heartMesh;
+        let balloons = [];
+        let balloonCount = 0;
+        
+        let state = 'CAKE'; 
+        let selectedIndex = 0;
+        let handX = 0.5;
+        let time = 0;
+
+        // ==========================================
+        // 3. THREE.JS SYSTEM
+        // ==========================================
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.001);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 120);
+
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                alpha: false,
+                powerPreference: "high-performance"
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            // Add directional light for cake
+            const directionalLight = new THREE.DirectionalLight(0xffd700, 1);
+            directionalLight.position.set(10, 20, 5);
+            scene.add(directionalLight);
+
+            groupGold = createParticleSystem('gold', CONFIG.goldCount, 2.5);
+            groupPink = createParticleSystem('pink', CONFIG.pinkCount, 4.0); 
+            groupGift = createParticleSystem('gift', CONFIG.giftCount, 3.5); 
+
+            createPhotos();
+            createBirthdayDecorations();
+            createBalloons(20); // Create initial balloons
+            
+            animate();
+        }
+
+        function createParticleSystem(type, count, size) {
+            const positions = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3);
+            const sizes = new Float32Array(count);
+            const phases = new Float32Array(count);
+            
+            const baseColor = new THREE.Color();
+            if(type === 'gold') baseColor.setHex(0xFFD700);
+            else if(type === 'pink') baseColor.setHex(0xFF69B4);
+            else baseColor.setHex(0x8A2BE2);
+            
+            // Create cake shape positions (layered cake)
+            const cakePositions = [];
+            const explodePositions = [];
+            const heartPositions = [];
+            
+            for(let i = 0; i < count; i++) {
+                // CAKE POSITIONS (3-layer cake)
+                const layer = Math.floor(Math.random() * 3);
+                const layerHeight = [10, 20, 30];
+                const layerRadius = [35, 25, 15];
+                
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * layerRadius[layer];
+                const height = -15 + layerHeight[layer] + Math.random() * 5;
+                
+                cakePositions.push(
+                    Math.cos(angle) * radius,
+                    height,
+                    Math.sin(angle) * radius
+                );
+                
+                // EXPLODE POSITIONS (spherical)
+                const phi = Math.acos(2 * Math.random() - 1);
+                const theta = Math.random() * Math.PI * 2;
+                const explodeRadius = CONFIG.explodeRadius * Math.cbrt(Math.random());
+                
+                explodePositions.push(
+                    explodeRadius * Math.sin(phi) * Math.cos(theta),
+                    explodeRadius * Math.sin(phi) * Math.sin(theta),
+                    explodeRadius * Math.cos(phi)
+                );
+                
+                // HEART POSITIONS
+                const t = Math.random() * Math.PI * 2;
+                let x = 16 * Math.pow(Math.sin(t), 3);
+                let y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                const scale = 2.0 + Math.random();
+                const z = (Math.random() - 0.5) * 10;
+                
+                heartPositions.push(x * scale, y * scale + 5, z);
+                
+                // Set initial positions to cake
+                positions[i*3] = cakePositions[i*3];
+                positions[i*3+1] = cakePositions[i*3+1];
+                positions[i*3+2] = cakePositions[i*3+2];
+                
+                // Set colors
+                colors[i*3] = baseColor.r;
+                colors[i*3+1] = baseColor.g;
+                colors[i*3+2] = baseColor.b;
+                
+                // Set sizes
+                sizes[i] = size * (0.7 + Math.random() * 0.6);
+                
+                // Set phases
+                phases[i] = Math.random() * Math.PI * 2;
+            }
+            
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            
+            geometry.userData = {
+                cake: new Float32Array(cakePositions),
+                explode: new Float32Array(explodePositions),
+                heart: new Float32Array(heartPositions),
+                phases: phases,
+                baseColor: baseColor,
+                baseSize: size
+            };
+            
+            const material = new THREE.PointsMaterial({
+                size: size,
+                map: textures[type],
+                transparent: true,
+                opacity: 1.0,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                sizeAttenuation: true
+            });
+            
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+            return points;
+        }
+
+        function createPhotos() {
+            const photoGeometry = new THREE.PlaneGeometry(9, 9);
+            const borderGeometry = new THREE.PlaneGeometry(10, 10);
+            const borderMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xFFD700,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            photoMeshes = [];
+            
+            for(let i = 0; i < 5; i++) {
+                const photoMaterial = new THREE.MeshBasicMaterial({ 
+                    map: photoTextures[i], 
+                    side: THREE.DoubleSide,
+                    transparent: true
+                });
+                
+                const photoMesh = new THREE.Mesh(photoGeometry, photoMaterial);
+                const borderMesh = new THREE.Mesh(borderGeometry, borderMaterial);
+                borderMesh.position.z = -0.1;
+                photoMesh.add(borderMesh);
+                
+                photoMesh.visible = false;
+                photoMesh.scale.set(0.001, 0.001, 0.001);
+                scene.add(photoMesh);
+                photoMeshes.push(photoMesh);
+            }
+        }
+
+        function createBirthdayDecorations() {
+            // HAPPY BIRTHDAY TEXT
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 2048, 0);
+            gradient.addColorStop(0, '#FF69B4');
+            gradient.addColorStop(0.5, '#8A2BE2');
+            gradient.addColorStop(1, '#FFD700');
+            
+            ctx.font = 'bold 120px "Comic Sans MS", cursive, sans-serif';
+            ctx.fillStyle = gradient;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Text shadow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetX = 5;
+            ctx.shadowOffsetY = 5;
+            
+            // Main text
+            ctx.fillText("HAPPY BIRTHDAY!", 1024, 200);
+            
+            // Subtext
+            ctx.font = 'bold 60px "Comic Sans MS", cursive, sans-serif';
+            ctx.fillText("Chúc mừng sinh nhật!", 1024, 320);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture, 
+                transparent: true, 
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            });
+            
+            titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(80, 20), material);
+            titleMesh.position.set(0, 45, 0);
+            scene.add(titleMesh);
+            
+            // BIRTHDAY CAKE
+            createBirthdayCake();
+            
+            // HEART MESSAGE
+            const heartCanvas = document.createElement('canvas');
+            heartCanvas.width = 2048; heartCanvas.height = 512;
+            const heartCtx = heartCanvas.getContext('2d');
+            
+            const heartGradient = heartCtx.createLinearGradient(0, 0, 2048, 0);
+            heartGradient.addColorStop(0, '#FF1493');
+            heartGradient.addColorStop(0.5, '#FF69B4');
+            heartGradient.addColorStop(1, '#FFB6C1');
+            
+            heartCtx.font = 'bold 140px "Comic Sans MS", cursive, sans-serif';
+            heartCtx.fillStyle = heartGradient;
+            heartCtx.textAlign = 'center';
+            heartCtx.textBaseline = 'middle';
+            
+            heartCtx.shadowColor = 'rgba(255, 20, 147, 0.5)';
+            heartCtx.shadowBlur = 30;
+            
+            heartCtx.fillText("❤️ BEST WISHES FOR U! ❤️", 1024, 256);
+            
+            const heartTexture = new THREE.CanvasTexture(heartCanvas);
+            const heartMaterial = new THREE.MeshBasicMaterial({ 
+                map: heartTexture, 
+                transparent: true, 
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            });
+            
+            heartMesh = new THREE.Mesh(new THREE.PlaneGeometry(90, 22), heartMaterial);
+            heartMesh.position.set(0, 0, 30);
+            heartMesh.visible = false;
+            scene.add(heartMesh);
+        }
+
+        function createBirthdayCake() {
+            cakeMesh = new THREE.Group();
+            
+            // === LAYER 1: Bottom (Chocolate) ===
+            const layer1Geometry = new THREE.CylinderGeometry(30, 30, 12, 64);
+            const layer1Material = new THREE.MeshPhongMaterial({ 
+                color: 0x8B4513, // Chocolate brown
+                shininess: 80,
+                specular: 0x111111
+            });
+            const layer1 = new THREE.Mesh(layer1Geometry, layer1Material);
+            layer1.position.y = -18;
+            
+            // Bottom layer decoration - cream drips
+            const dripGeometry = new THREE.TorusGeometry(30, 1.5, 16, 64, Math.PI);
+            const dripMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xFFFACD, // Cream color
+                shininess: 100
+            });
+            const drip1 = new THREE.Mesh(dripGeometry, dripMaterial);
+            drip1.rotation.x = Math.PI / 2;
+            drip1.position.y = -12;
+            
+            // === LAYER 2: Middle (Strawberry) ===
+            const layer2Geometry = new THREE.CylinderGeometry(25, 25, 12, 64);
+            const layer2Material = new THREE.MeshPhongMaterial({ 
+                color: 0xFF69B4, // Pink strawberry
+                shininess: 80,
+                specular: 0x111111
+            });
+            const layer2 = new THREE.Mesh(layer2Geometry, layer2Material);
+            layer2.position.y = -6;
+            
+            // Middle layer decoration
+            const drip2 = new THREE.Mesh(dripGeometry.clone(), dripMaterial);
+            drip2.rotation.x = Math.PI / 2;
+            drip2.scale.set(0.83, 0.83, 0.83);
+            drip2.position.y = 0;
+            
+            // === LAYER 3: Top (Vanilla) ===
+            const layer3Geometry = new THREE.CylinderGeometry(20, 20, 12, 64);
+            const layer3Material = new THREE.MeshPhongMaterial({ 
+                color: 0xFFF8DC, // Vanilla cream
+                shininess: 100,
+                specular: 0x222222
+            });
+            const layer3 = new THREE.Mesh(layer3Geometry, layer3Material);
+            layer3.position.y = 6;
+            
+            // Top layer decoration - frosting rim
+            const rimGeometry = new THREE.TorusGeometry(20, 2, 16, 64);
+            const rimMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xFFD700, // Gold frosting
+                shininess: 100,
+                emissive: 0xFFD700,
+                emissiveIntensity: 0.2
+            });
+            const rim = new THREE.Mesh(rimGeometry, rimMaterial);
+            rim.rotation.x = Math.PI / 2;
+            rim.position.y = 12;
+            
+            // === DECORATIVE ELEMENTS ===
+            // Strawberries on top
+            const strawberryGeometry = new THREE.SphereGeometry(1.5, 16, 16);
+            const strawberryMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xFF0000,
+                shininess: 100
+            });
+            
+            for(let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const radius = 15;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                
+                const strawberry = new THREE.Mesh(strawberryGeometry, strawberryMaterial);
+                strawberry.position.set(x, 13, z);
+                strawberry.scale.set(1, 1.2, 1); // Slightly elongated
+                cakeMesh.add(strawberry);
+                
+                // Green leaf on strawberry
+                const leafGeometry = new THREE.ConeGeometry(1, 1.5, 4);
+                const leafMaterial = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+                const leaf = new THREE.Mesh(leafGeometry, leafMaterial);
+                leaf.position.set(x, 14.5, z);
+                leaf.rotation.y = Math.PI / 4;
+                cakeMesh.add(leaf);
+            }
+            
+            // === CANDLES ===
+            const candlePositions = [
+                { x: 0, z: 0 }, // Center
+                { x: 8, z: 0 },
+                { x: -8, z: 0 },
+                { x: 0, z: 8 },
+                { x: 0, z: -8 },
+                { x: 6, z: 6 },
+                { x: -6, z: 6 },
+                { x: 6, z: -6 },
+                { x: -6, z: -6 }
+            ];
+            
+            candlePositions.forEach((pos, i) => {
+                // Candle stick
+                const candleGeometry = new THREE.CylinderGeometry(0.4, 0.5, 10, 16);
+                const candleColors = [0xFF69B4, 0x8A2BE2, 0xFFD700, 0xFF1493, 0x00CED1];
+                const candleColor = candleColors[i % candleColors.length];
+                const candleMaterial = new THREE.MeshPhongMaterial({ 
+                    color: candleColor,
+                    shininess: 50
+                });
+                const candle = new THREE.Mesh(candleGeometry, candleMaterial);
+                candle.position.set(pos.x, 16, pos.z);
+                cakeMesh.add(candle);
+                
+                // Candle wick
+                const wickGeometry = new THREE.CylinderGeometry(0.1, 0.1, 2, 8);
+                const wickMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
+                const wick = new THREE.Mesh(wickGeometry, wickMaterial);
+                wick.position.set(pos.x, 22, pos.z);
+                cakeMesh.add(wick);
+                
+                // Flame
+                const flameGeometry = new THREE.SphereGeometry(1.2, 8, 8);
+                flameGeometry.scale(1, 1.5, 1); // Elongate flame
+                const flameMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xFF4500,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const flame = new THREE.Mesh(flameGeometry, flameMaterial);
+                flame.position.set(pos.x, 23.5, pos.z);
+                flame.userData.candleIndex = i; // For animation
+                cakeMesh.add(flame);
+                
+                // Flame glow
+                const glowGeometry = new THREE.SphereGeometry(2, 8, 8);
+                const glowMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xFFFF00,
+                    transparent: true,
+                    opacity: 0.3,
+                    blending: THREE.AdditiveBlending
+                });
+                const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+                glow.position.set(pos.x, 23.5, pos.z);
+                glow.userData.candleIndex = i;
+                cakeMesh.add(glow);
+            });
+            
+            // Add all layers to cake group
+            cakeMesh.add(layer1);
+            cakeMesh.add(drip1);
+            cakeMesh.add(layer2);
+            cakeMesh.add(drip2);
+            cakeMesh.add(layer3);
+            cakeMesh.add(rim);
+            
+            // Position cake
+            cakeMesh.position.y = -5;
+            
+            scene.add(cakeMesh);
+        }
+
+        function createBalloons(count) {
+            const balloonGeometry = new THREE.SphereGeometry(2, 16, 16);
+            
+            for(let i = 0; i < count; i++) {
+                const color = new THREE.Color();
+                color.setHSL(Math.random(), 0.8, 0.7);
+                
+                const balloonMaterial = new THREE.MeshPhongMaterial({
+                    color: color,
+                    shininess: 100,
+                    transparent: true,
+                    opacity: 0.9
+                });
+                
+                const balloon = new THREE.Mesh(balloonGeometry, balloonMaterial);
+                
+                // Random position
+                balloon.position.set(
+                    (Math.random() - 0.5) * 100,
+                    -50 + Math.random() * 30,
+                    (Math.random() - 0.5) * 100
+                );
+                
+                // Random velocity
+                balloon.userData = {
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.5,
+                        Math.random() * 0.8 + 0.5,
+                        (Math.random() - 0.5) * 0.5
+                    ),
+                    wobble: Math.random() * Math.PI * 2,
+                    color: color
+                };
+                
+                scene.add(balloon);
+                balloons.push(balloon);
+                balloonCount++;
+            }
+            
+            updateBalloonCounter();
+        }
+
+        function updateBalloonCounter() {
+            document.getElementById('balloon-count').textContent = balloonCount;
+        }
+
+        function updateParticles() {
+            const groups = [groupGold, groupPink, groupGift];
+            const types = ['gold', 'pink', 'gift'];
+            
+            groups.forEach((group, idx) => {
+                const positions = group.geometry.attributes.position.array;
+                const colors = group.geometry.attributes.color.array;
+                const sizes = group.geometry.attributes.size.array;
+                const phases = group.geometry.userData.phases;
+                const baseColor = group.geometry.userData.baseColor;
+                
+                let targetArray;
+                if (state === 'CAKE') {
+                    targetArray = group.geometry.userData.cake;
+                    group.rotation.y += 0.002;
+                } else if (state === 'HEART') {
+                    targetArray = group.geometry.userData.heart;
+                    const pulse = 1 + Math.sin(time * 5) * 0.2;
+                    group.scale.set(pulse, pulse, pulse);
+                } else {
+                    targetArray = group.geometry.userData.explode;
+                    const handRotY = (handX - 0.5) * 6.0;
+                    group.rotation.y += (handRotY - group.rotation.y) * 0.05;
+                }
+                
+                // Update positions
+                for(let i = 0; i < positions.length; i++) {
+                    positions[i] += (targetArray[i] - positions[i]) * 0.1;
+                }
+                group.geometry.attributes.position.needsUpdate = true;
+                
+                // Update colors and sizes
+                for(let i = 0; i < positions.length / 3; i++) {
+                    const phase = phases[i];
+                    const brightness = 0.7 + 0.3 * Math.sin(time * 3 + phase);
+                    
+                    colors[i*3] = baseColor.r * brightness;
+                    colors[i*3+1] = baseColor.g * brightness;
+                    colors[i*3+2] = baseColor.b * brightness;
+                    
+                    // Pulsing size for some effects
+                    if(state === 'HEART' || state === 'EXPLODE') {
+                        sizes[i] = group.geometry.userData.baseSize * (0.8 + 0.4 * Math.sin(time * 4 + phase));
+                    }
+                }
+                group.geometry.attributes.color.needsUpdate = true;
+                group.geometry.attributes.size.needsUpdate = true;
+            });
+        }
+
+        function updateBalloons() {
+            balloons.forEach((balloon, index) => {
+                const data = balloon.userData;
+                
+                // Update position
+                balloon.position.x += data.velocity.x * CONFIG.balloonSpeed;
+                balloon.position.y += data.velocity.y * CONFIG.balloonSpeed;
+                balloon.position.z += data.velocity.z * CONFIG.balloonSpeed;
+                
+                // Wobble effect
+                balloon.rotation.x = Math.sin(time * 2 + data.wobble) * 0.1;
+                balloon.rotation.z = Math.cos(time * 2 + data.wobble) * 0.1;
+                
+                // Remove if too high
+                if(balloon.position.y > 80) {
+                    scene.remove(balloon);
+                    balloons.splice(index, 1);
+                    balloonCount--;
+                    updateBalloonCounter();
+                    
+                    // Occasionally create new balloon
+                    if(Math.random() < 0.3) {
+                        createBalloons(1);
+                    }
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            time = Date.now() * 0.001;
+            
+            // Update all systems
+            updateParticles();
+            updateBalloons();
+            
+            // Update cake rotation
+            if(cakeMesh && state === 'CAKE') {
+                cakeMesh.rotation.y += 0.0015;
+                
+                // Animate candle flames
+                cakeMesh.children.forEach((child, i) => {
+                    if(i >= 3) { // Skip cake layers
+                        if(i % 2 === 1) { // Flames (odd indices after cake layers)
+                            child.scale.x = 1 + Math.sin(time * 10 + i) * 0.3;
+                            child.scale.y = 1 + Math.cos(time * 8 + i) * 0.4;
+                            child.scale.z = 1 + Math.sin(time * 12 + i) * 0.3;
+                        }
+                    }
+                });
+            }
+            
+            // Update photo displays
+            if(state === 'EXPLODE') {
+                titleMesh.visible = false;
+                heartMesh.visible = false;
+                if(cakeMesh) cakeMesh.visible = false;
+                
+                const baseAngle = groupGold.rotation.y;
+                const angleStep = (Math.PI * 2) / 5;
+                
+                photoMeshes.forEach((mesh, i) => {
+                    mesh.visible = true;
+                    const angle = baseAngle + i * angleStep;
+                    const x = Math.sin(angle) * CONFIG.photoOrbitRadius;
+                    const z = Math.cos(angle) * CONFIG.photoOrbitRadius;
+                    const y = Math.sin(time * 0.5 + i) * 5;
+                    
+                    mesh.position.lerp(new THREE.Vector3(x, y, z), 0.1);
+                    mesh.lookAt(camera.position);
+                    
+                    // Scale based on distance from camera
+                    const distance = mesh.position.distanceTo(camera.position);
+                    const scale = 0.8 - (distance / 100) * 0.4;
+                    mesh.scale.lerp(new THREE.Vector3(scale, scale, scale), 0.1);
+                });
+                
+            } else if(state === 'PHOTO') {
+                photoMeshes.forEach((mesh, i) => {
+                    if(i === selectedIndex) {
+                        mesh.position.lerp(new THREE.Vector3(0, 0, 50), 0.1);
+                        mesh.scale.lerp(new THREE.Vector3(4, 4, 4), 0.1);
+                        mesh.lookAt(camera.position);
+                    } else {
+                        mesh.scale.lerp(new THREE.Vector3(0.001, 0.001, 0.001), 0.1);
+                    }
+                });
+                
+            } else if(state === 'CAKE') {
+                titleMesh.visible = true;
+                heartMesh.visible = false;
+                if(cakeMesh) cakeMesh.visible = true;
+                photoMeshes.forEach(mesh => {
+                    mesh.scale.lerp(new THREE.Vector3(0.001, 0.001, 0.001), 0.1);
+                });
+                
+                // Title animation
+                titleMesh.position.y = 45 + Math.sin(time) * 3;
+                const titleScale = 1 + Math.sin(time * 0.5) * 0.05;
+                titleMesh.scale.set(titleScale, titleScale, titleScale);
+                
+            } else if(state === 'HEART') {
+                titleMesh.visible = false;
+                heartMesh.visible = true;
+                if(cakeMesh) cakeMesh.visible = false;
+                photoMeshes.forEach(mesh => {
+                    mesh.scale.lerp(new THREE.Vector3(0.001, 0.001, 0.001), 0.1);
+                });
+                
+                // Heart animation
+                heartMesh.position.y = Math.sin(time * 2) * 5;
+                const heartScale = 1 + Math.sin(time * 3) * 0.1;
+                heartMesh.scale.set(heartScale, heartScale, heartScale);
+                
+                // Create occasional balloons
+                if(Math.random() < 0.02) {
+                    createBalloons(1);
+                }
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        function startSystem() {
+            document.getElementById('btnStart').style.display = 'none';
+            document.getElementById('birthday-message').style.opacity = '0.7';
+            
+            // Try to play music
+            const playMusic = () => {
+                bgMusic.play().catch(e => {
+                    console.log("Music autoplay blocked:", e);
+                    // Enable music on next click
+                    document.getElementById('btnStart').textContent = "🎵 BẬT NHẠC SINH NHẬT";
+                    document.getElementById('btnStart').style.display = 'block';
+                    document.getElementById('btnStart').onclick = function() {
+                        bgMusic.play();
+                        this.style.display = 'none';
+                        init3D();
+                    };
+                    return;
+                });
+            };
+            
+            playMusic();
+            init3D();
+            
+            // Initialize hand tracking
+            const video = document.getElementsByClassName('input_video')[0];
+            const canvas = document.getElementById('camera-preview');
+            const ctx = canvas.getContext('2d');
+            
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            hands.onResults((results) => {
+                if (!ctx) return;
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (results.image) {
+                    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+                }
+                
+                // Hand tracking logic
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    handX = landmarks[9].x; // Middle of hand
+                    
+                    // Detect two hands making heart shape
+                    if (results.multiHandLandmarks.length === 2) {
+                        const hand1 = results.multiHandLandmarks[0];
+                        const hand2 = results.multiHandLandmarks[1];
+                        
+                        // Check if thumbs and index fingers are close (heart gesture)
+                        const thumbDist = Math.sqrt(
+                            Math.pow(hand1[4].x - hand2[4].x, 2) + 
+                            Math.pow(hand1[4].y - hand2[4].y, 2)
+                        );
+                        
+                        const indexDist = Math.sqrt(
+                            Math.pow(hand1[8].x - hand2[8].x, 2) + 
+                            Math.pow(hand1[8].y - hand2[8].y, 2)
+                        );
+                        
+                        if (thumbDist < 0.1 && indexDist < 0.1) {
+                            state = 'HEART';
+                            
+                            // Create balloons when in heart mode
+                            if (Math.random() < 0.1) {
+                                createBalloons(2);
+                            }
+                            return;
+                        }
+                    }
+                    
+                    // Single hand gestures
+                    const thumbTip = landmarks[4];
+                    const indexTip = landmarks[8];
+                    const middleTip = landmarks[12];
+                    const ringTip = landmarks[16];
+                    const pinkyTip = landmarks[20];
+                    const wrist = landmarks[0];
+                    
+                    // Calculate average distance from fingers to wrist
+                    let totalDist = 0;
+                    const fingerTips = [indexTip, middleTip, ringTip, pinkyTip];
+                    fingerTips.forEach(tip => {
+                        totalDist += Math.sqrt(
+                            Math.pow(tip.x - wrist.x, 2) + 
+                            Math.pow(tip.y - wrist.y, 2)
+                        );
+                    });
+                    const avgDist = totalDist / 4;
+                    
+                    // Calculate pinch distance between thumb and index
+                    const pinchDist = Math.sqrt(
+                        Math.pow(thumbTip.x - indexTip.x, 2) + 
+                        Math.pow(thumbTip.y - indexTip.y, 2)
+                    );
+                    
+                    // Gesture detection
+                    if (avgDist < 0.15) {
+                        // Fist - Show cake
+                        state = 'CAKE';
+                    } else if (pinchDist < 0.05) {
+                        // Pinch - Focus on photo
+                        state = 'PHOTO';
+                        // Select photo based on hand position
+                        selectedIndex = Math.min(4, Math.max(0, Math.floor(handX * 5)));
+                    } else {
+                        // Open hand - Explode/celebrate
+                        state = 'EXPLODE';
+                        
+                        // Create occasional balloons
+                        if (Math.random() < 0.05) {
+                            createBalloons(1);
+                        }
+                    }
+                } else {
+                    // No hands detected - default to cake
+                    state = 'CAKE';
+                }
+            });
+            
+            // Start camera
+            const cameraUtils = new Camera(video, {
+                onFrame: async () => {
+                    await hands.send({ image: video });
+                },
+                width: 320,
+                height: 240
+            });
+            
+            cameraUtils.start();
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+        
+        // Add click to create balloon feature
+        document.addEventListener('click', (e) => {
+            if (balloons.length < 100) { // Limit balloons
+                createBalloons(3);
+            }
+        });
+    </script>
+</body>
+</html>
